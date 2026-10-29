@@ -10,6 +10,16 @@ python main.py --check   # проверить подключение к IMAP и 
 python main.py           # или: python -m mail_notifier
 ```
 
+### Docker
+
+```
+docker compose run --rm mail-notifier python main.py --check   # проверка подключения
+docker compose up -d --build                                   # запуск в фоне
+docker compose logs -f                                         # логи
+```
+
+Параметры берутся из `.env` (через `env_file`, в образ файл не копируется). `state.json` хранится в томе `mail-notifier-data` (`/app/data/state.json` внутри контейнера), поэтому прогресс сохраняется при пересоздании контейнера.
+
 Код разбит по слоям в пакете `mail_notifier/`. Подробное техническое описание — в [spec.md](spec.md).
 
 ## Параметры `.env`

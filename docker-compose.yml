@@ -1,0 +1,19 @@
+services:
+  mail-notifier:
+    build: .
+    image: mail-notifier
+    container_name: mail-notifier
+    restart: unless-stopped
+    # Параметры подключения берутся из .env; сам файл в образ не копируется.
+    env_file: .env
+    volumes:
+      # Каталог для state.json, чтобы прогресс сохранялся между перезапусками.
+      - mail-notifier-data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mail-notifier-data:

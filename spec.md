@@ -28,6 +28,9 @@ mail_messanger/
 ├── state.json              # прогресс обработки, создаётся при первом запуске
 ├── main.py                 # точка входа из корня: python main.py [--check]
 ├── requirements.txt
+├── Dockerfile              # образ на python:3.13-slim, STATE_FILE=/app/data/state.json
+├── docker-compose.yml      # сервис mail-notifier: env_file .env, том для state.json
+├── .dockerignore           # .env, .venv, state.json и прочее не попадают в образ
 ├── README.md               # краткая инструкция по запуску
 ├── spec.md                 # этот документ
 ├── CLAUDE.md               # заметки для Claude Code
@@ -207,6 +210,15 @@ Ctrl+C или SIGTERM поднимают `KeyboardInterrupt`; `session()` в б�
 ```
 
 Режим `--check` проверяет `getMe` в Telegram, а также вход в IMAP и открытие папки. Он выводит число писем и наличие IDLE, ничего не отправляет и не меняет `state.json`.
+
+Запуск в Docker:
+
+```
+docker compose run --rm mail-notifier python main.py --check
+docker compose up -d --build
+```
+
+Образ не содержит `.env`: переменные передаются через `env_file` в `docker-compose.yml`, а `load_dotenv` внутри контейнера ничего не находит и не мешает. Переменная `STATE_FILE` в образе указывает на `/app/data/state.json`; каталог `/app/data` подключён к именованному тому `mail-notifier-data`, так что состояние переживает пересоздание контейнера (атомарная запись через `.tmp` идёт в тот же каталог). Процесс работает от непривилегированного пользователя `app`; `docker stop` посылает SIGTERM, который обрабатывается штатно (§5.5). Политика `restart: unless-stopped` отвечает за автозапуск.
 
 Логи пишутся в stderr в формате `ГГГГ-ММ-ДД ЧЧ:ММ:СС,мс УРОВЕНЬ сообщение`. Для работы в фоне сервис можно запустить как службу Windows (например, через NSSM или Планировщик заданий) или как unit systemd на Linux: перезапуск внутри процесса уже предусмотрен, менеджер служб нужен только для автозапуска.
 
