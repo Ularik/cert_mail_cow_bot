@@ -5,6 +5,7 @@
 .venv
 **/__pycache__
 state.json
+replies.json
 *.tmp
 Dockerfile
 docker-compose.yml

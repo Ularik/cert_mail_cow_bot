@@ -11,6 +11,7 @@ from imapclient.exceptions import IMAPClientError
 
 from .config import Config
 from .notification import HEADERS_ONLY, build_notification
+from .replies import ReplyStore, reply_target
 from .state import State
 from .telegram import Telegram, TelegramError, TelegramUnavailable
 
@@ -37,9 +38,10 @@ def connect(cfg: Config) -> IMAPClient:
 
 
 class MailWatcher:
-    def __init__(self, config: Config, telegram: Telegram):
+    def __init__(self, config: Config, telegram: Telegram, replies: ReplyStore | None = None):
         self.cfg = config
         self.telegram = telegram
+        self.replies = replies
         self.state = State(config.state_file)
 
     def open_folder(self, client: IMAPClient) -> None:
@@ -88,8 +90,11 @@ class MailWatcher:
                 msg[HEADERS_ONLY] = "1"
 
             try:
-                self.telegram.send(build_notification(msg, self.cfg.imap_folder))
+                sent = self.telegram.send(build_notification(msg, self.cfg.imap_folder))
                 log.info("Уведомление отправлено: UID %s", uid)
+                target = reply_target(msg) if self.replies else None
+                if target:
+                    self.replies.remember(sent["message_id"], target)
             except TelegramUnavailable:
                 # UID не сдвигаем — письмо будет обработано повторно после переподключения.
                 raise

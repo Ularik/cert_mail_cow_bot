@@ -9,12 +9,18 @@ import argparse
 import logging
 import os
 import signal
+import smtplib
 import sys
+import threading
 
 import requests
+from imapclient.imapclient import SENT
 from imapclient.exceptions import IMAPClientError
 
+from .bot import ReplyBot
 from .config import Config
+from .mailer import Mailer
+from .replies import ReplyStore
 from .telegram import Telegram, TelegramError
 from .watcher import MailWatcher, connect
 
@@ -34,10 +40,21 @@ def check(config: Config, telegram: Telegram) -> int:
         info = client.select_folder(config.imap_folder, readonly=True)
         log.info("IMAP: папка %s, писем %s, IDLE=%s",
                  config.imap_folder, info.get(b"EXISTS"), client.has_capability("IDLE"))
+        if config.replies_enabled and config.sent_folder != "":
+            sent = config.sent_folder or client.find_special_folder(SENT) or "Sent"
+            log.info("IMAP: копии ответов будут сохраняться в папку %s", sent)
         client.logout()
     except (IMAPClientError, OSError) as exc:
         log.error("IMAP: %s", exc)
         ok = False
+    if config.replies_enabled:
+        try:
+            Mailer(config).smtp().quit()
+            log.info("SMTP: вход на %s:%s выполнен, ответы будут отправляться от %s",
+                     config.smtp_host, config.smtp_port, config.mail_from)
+        except (smtplib.SMTPException, OSError) as exc:
+            log.error("SMTP: %s", exc)
+            ok = False
     return 0 if ok else 1
 
 
@@ -60,8 +77,14 @@ def main() -> int:
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, stop)
 
+    replies = None
+    if config.replies_enabled:
+        replies = ReplyStore(config.replies_file)
+        bot = ReplyBot(config, replies)
+        threading.Thread(target=bot.run_forever, name="reply-bot", daemon=True).start()
+
     try:
-        MailWatcher(config, telegram).run_forever()
+        MailWatcher(config, telegram, replies).run_forever()
     except KeyboardInterrupt:
         log.info("Остановлено")
     return 0
